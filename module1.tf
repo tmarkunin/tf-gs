@@ -33,7 +33,7 @@ data "aws_ami" "ubuntu" {
 
 resource "aws_instance" "nginx" {
   ami           = "${data.aws_ami.ubuntu.id}"
-  instance_type = "t2.nano"
+  instance_type = "t2.micro"
   key_name        = "${var.key_name}"
 
   connection {
@@ -46,7 +46,7 @@ resource "aws_instance" "nginx" {
     inline = [
       "sudo apt update",
       "sudo apt install nginx -y",
-      "sudo ufw allow 'Nginx HTTP'",
+      "sudo ufw disable",
       "sudo systemctl start nginx"
     ]
   }
