@@ -3,6 +3,16 @@ variable "key_name" {
   default = "ec2-user"
 }
 
+variable "network_address_space" {
+  default = "10.1.0.0/16"
+}
+variable "subnet1_address_space" {
+  default = "10.1.0.0/24"
+}
+variable "subnet2_address_space" {
+  default = "10.1.1.0/24"
+}
+
 ##################################################################################
 # PROVIDERS
 ##################################################################################
@@ -12,50 +22,122 @@ provider "aws" {
 }
 
 ##################################################################################
+# DATA
+##################################################################################
+
+data "aws_availability_zones" "available" {}
+
+##################################################################################
 # RESOURCES
 ##################################################################################
-data "aws_ami" "ubuntu" {
-  most_recent = true
 
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-trusty-14.04-amd64-server-*"]
-  }
+# NETWORKING #
+resource "aws_vpc" "vpc" {
+  cidr_block = "${var.network_address_space}"
+  enable_dns_hostnames = "true"
 
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-
-  owners = ["099720109477"] # Canonical
 }
 
+resource "aws_internet_gateway" "igw" {
+  vpc_id = "${aws_vpc.vpc.id}"
+}
 
-resource "aws_instance" "nginx" {
-  ami           = "${data.aws_ami.ubuntu.id}"
+resource "aws_subnet" "subnet1" {
+  cidr_block        = "${var.subnet1_address_space}"
+  vpc_id            = "${aws_vpc.vpc.id}"
+  map_public_ip_on_launch = "true"
+  availability_zone = "${data.aws_availability_zones.available.names[0]}"
+
+}
+
+resource "aws_subnet" "subnet2" {
+  cidr_block        = "${var.subnet2_address_space}"
+  vpc_id            = "${aws_vpc.vpc.id}"
+  map_public_ip_on_launch = "true"
+  availability_zone = "${data.aws_availability_zones.available.names[1]}"
+
+}
+
+# ROUTING #
+resource "aws_route_table" "rtb" {
+  vpc_id = "${aws_vpc.vpc.id}"
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = "${aws_internet_gateway.igw.id}"
+  }
+}
+
+resource "aws_route_table_association" "rta-subnet1" {
+  subnet_id      = "${aws_subnet.subnet1.id}"
+  route_table_id = "${aws_route_table.rtb.id}"
+}
+
+resource "aws_route_table_association" "rta-subnet2" {
+  subnet_id      = "${aws_subnet.subnet2.id}"
+  route_table_id = "${aws_route_table.rtb.id}"
+}
+
+# SECURITY GROUPS #
+# Nginx security group 
+resource "aws_security_group" "nginx-sg" {
+  name        = "nginx_sg"
+  vpc_id      = "${aws_vpc.vpc.id}"
+
+  # SSH access from anywhere
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # HTTP access from anywhere
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # outbound internet access
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# INSTANCES #
+
+resource "aws_instance" "nginx1" {
+  ami           = "ami-c58c1dd3"
   instance_type = "t2.micro"
+  subnet_id     = "${aws_subnet.subnet1.id}"
+  vpc_security_group_ids = ["${aws_security_group.nginx-sg.id}"]
   key_name        = "${var.key_name}"
 
   connection {
-    user        = "ubuntu"
+    user        = "ec2-user"
     private_key = "${file(var.private_key_path)}"
-    host = "${aws_instance.nginx.public_dns}"
+    host = "${aws_instance.nginx1.public_dns}"
   }
 
   provisioner "remote-exec" {
     inline = [
-      "sudo apt update",
-      "sudo apt install nginx -y",
-      "sudo ufw disable",
-      "sudo systemctl start nginx"
+      "sudo yum install nginx -y",
+      "sudo service nginx start",
+      "echo '<html><head><title>Blue Team Server</title></head><body style=\"background-color:#1F778D\"><p style=\"text-align: center;\"><span style=\"color:#FFFFFF;\"><span style=\"font-size:28px;\">Blue Team</span></span></p></body></html>' | sudo tee /usr/share/nginx/html/index.html"
     ]
   }
 }
+
 
 ##################################################################################
 # OUTPUT
 ##################################################################################
 
 output "aws_instance_public_dns" {
-    value = "http://${aws_instance.nginx.public_dns}"
+    value = "http://${aws_instance.nginx1.public_dns}"
 }
