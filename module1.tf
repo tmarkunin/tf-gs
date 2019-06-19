@@ -181,7 +181,7 @@ resource "aws_instance" "nginx2" {
   connection {
     user        = "ec2-user"
     private_key = "${file(var.private_key_path)}"
-    host = "${aws_instance.nginx1.public_dns}"
+    host = "${aws_instance.nginx2.public_dns}"
   }
 
   provisioner "remote-exec" {
