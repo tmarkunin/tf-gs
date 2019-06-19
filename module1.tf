@@ -112,7 +112,7 @@ resource "aws_security_group" "nginx-sg" {
 # INSTANCES #
 
 resource "aws_instance" "nginx1" {
-  ami           = "ami-c58c1dd3"
+  ami           = "ami-0ce5ae170b49e3870"
   instance_type = "t2.micro"
   subnet_id     = "${aws_subnet.subnet1.id}"
   vpc_security_group_ids = ["${aws_security_group.nginx-sg.id}"]
