@@ -79,6 +79,27 @@ resource "aws_route_table_association" "rta-subnet2" {
 }
 
 # SECURITY GROUPS #
+resource "aws_security_group" "elb-sg" {
+  name        = "nginx_elb_sg"
+  vpc_id      = "${aws_vpc.vpc.id}"
+
+  #Allow HTTP from anywhere
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  #allow all outbound
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 # Nginx security group 
 resource "aws_security_group" "nginx-sg" {
   name        = "nginx_sg"
@@ -92,12 +113,12 @@ resource "aws_security_group" "nginx-sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # HTTP access from anywhere
+  # HTTP access from the VPC
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["${var.network_address_space}"]
   }
 
   # outbound internet access
@@ -106,6 +127,23 @@ resource "aws_security_group" "nginx-sg" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+
+# LOAD BALANCER #
+resource "aws_elb" "web" {
+  name = "nginx-elb"
+
+  subnets         = ["${aws_subnet.subnet1.id}", "${aws_subnet.subnet2.id}"]
+  security_groups = ["${aws_security_group.elb-sg.id}"]
+  instances       = ["${aws_instance.nginx1.id}", "${aws_instance.nginx2.id}"]
+
+  listener {
+    instance_port     = 80
+    instance_protocol = "http"
+    lb_port           = 80
+    lb_protocol       = "http"
   }
 }
 
@@ -133,11 +171,32 @@ resource "aws_instance" "nginx1" {
   }
 }
 
+resource "aws_instance" "nginx2" {
+  ami           = "ami-0ce5ae170b49e3870"
+  instance_type = "t2.micro"
+  subnet_id     = "${aws_subnet.subnet2.id}"
+  vpc_security_group_ids = ["${aws_security_group.nginx-sg.id}"]
+  key_name        = "${var.key_name}"
+
+  connection {
+    user        = "ec2-user"
+    private_key = "${file(var.private_key_path)}"
+    host = "${aws_instance.nginx1.public_dns}"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo amazon-linux-extras install -y nginx1.12",
+      "sudo service nginx start",
+      "echo '<html><head><title>Green Team Server</title></head><body style=\"background-color:#77A032\"><p style=\"text-align: center;\"><span style=\"color:#FFFFFF;\"><span style=\"font-size:28px;\">Blue Team</span></span></p></body></html>' | sudo tee /usr/share/nginx/html/index.html"
+    ]
+  }
+}
 
 ##################################################################################
 # OUTPUT
 ##################################################################################
 
-output "aws_instance_public_dns" {
-    value = "http://${aws_instance.nginx1.public_dns}"
+output "aws_elb_public_dns" {
+    value = "http://${aws_elb.web.dns_name}"
 }
