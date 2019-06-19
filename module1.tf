@@ -38,7 +38,17 @@ resource "aws_instance" "nginx" {
   ami           = "${data.aws_ami.ubuntu.id}"
   instance_type = "t2.micro"
   key_name        = "${var.key_name}"
+  connection {
+    user        = "ec2-user"
+    private_key = "${file(var.private_key_path)}"
+  }
 
+  provisioner "remote-exec" {
+    inline = [
+      "sudo yum install nginx -y",
+      "sudo service nginx start"
+    ]
+  }
 }
 
 ##################################################################################
@@ -46,5 +56,5 @@ resource "aws_instance" "nginx" {
 ##################################################################################
 
 output "aws_instance_public_dns" {
-    value = "${aws_instance.nginx.public_dns}"
+    value = "http://${aws_instance.nginx.public_dns}"
 }
