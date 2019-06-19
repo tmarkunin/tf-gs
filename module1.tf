@@ -1,6 +1,3 @@
-
-variable "aws_access_key" {}
-variable "aws_secret_key" {}
 variable "private_key_path" {}
 variable "key_name" {
   default = "ec2-user"
@@ -36,8 +33,9 @@ data "aws_ami" "ubuntu" {
 
 resource "aws_instance" "nginx" {
   ami           = "${data.aws_ami.ubuntu.id}"
-  instance_type = "t2.micro"
+  instance_type = "t2.nano"
   key_name        = "${var.key_name}"
+  
   connection {
     user        = "ec2-user"
     private_key = "${file(var.private_key_path)}"
