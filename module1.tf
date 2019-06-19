@@ -35,11 +35,11 @@ resource "aws_instance" "nginx" {
   ami           = "${data.aws_ami.ubuntu.id}"
   instance_type = "t2.nano"
   key_name        = "${var.key_name}"
-  
+
   connection {
-    user        = "ec2-user"
+    user        = "ubuntu"
     private_key = "${file(var.private_key_path)}"
-    host = "${self.public_ip}"
+    host = "${aws_instance.nginx.public_dns}"
   }
 
   provisioner "remote-exec" {
